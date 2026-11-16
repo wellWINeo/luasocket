@@ -44,7 +44,14 @@ local SCHEMES = {
             require("ssl.https"), 'LuaSocket: LuaSec not found')
           local tcp = assert(
             https.tcp, 'LuaSocket: Function tcp() not available from LuaSec')
+          if t.proxy_tunnel then
+              socket.try(https.PROXY_TUNNEL,
+                  'LuaSocket: LuaSec CONNECT support required')
+          end
           return tcp(t) end }}
+
+-- Capability check for LuaSec's public HTTPS request API.
+_M.PROXY_TUNNEL = true
 
 -----------------------------------------------------------------------------
 -- Reads MIME headers from a connection, unfolding where needed
@@ -297,7 +304,11 @@ local function adjustrequest(reqt)
 
     local proxy = reqt.proxy or _M.PROXY
     if proxy then
-        proxy = url.parse(proxy)
+        proxy = url.parse(proxy) or {}
+        if not reqt.create and nreqt.scheme == "https" then
+            socket.try(proxy.scheme == "http" and proxy.host,
+                "unsupported HTTPS proxy")
+        end
         proxy.port = proxy.port or 3128
     end
     local tunnel = not reqt.create
@@ -319,7 +330,16 @@ local function adjustrequest(reqt)
     else nreqt.uri = reqt.uri or adjusturi(nreqt) end
     -- adjust headers in request
     nreqt.headers = adjustheaders(nreqt)
-    if tunnel then nreqt.headers["proxy-authorization"] = nil end
+    if tunnel then
+        -- URL credentials were decoded above; only an explicit header
+        -- overrides them (not adjustheaders' legacy credential encoding).
+        for name, value in base.pairs(reqt.headers or {}) do
+            if string.lower(name) == "proxy-authorization" then
+                nreqt.proxy_tunnel.authorization = value
+            end
+        end
+        nreqt.headers["proxy-authorization"] = nil
+    end
     if nreqt.source
         and not nreqt.headers["content-length"]
         and not nreqt.headers["transfer-encoding"]
