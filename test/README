@@ -12,3 +12,8 @@ To run these tests, just run lua on the server and then on the client.
 
 Good luck,
 Diego.
+
+HTTP CONNECT request-shaping tests (no network or LuaSec required):
+    From the repository root: lua test/http_proxy_connect_test.lua
+Real proxy/TLS integration coverage is in LuaSec's test/proxy_integration.py
+and requires staging the matching CONNECT-enabled branches of both libraries.

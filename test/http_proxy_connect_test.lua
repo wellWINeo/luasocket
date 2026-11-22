@@ -54,6 +54,7 @@ end
 local https_state = { calls = 0 }
 package.preload["ssl.https"] = function()
     return {
+        PROXY_TUNNEL = true,
         tcp = function(params)
             https_state.calls = https_state.calls + 1
             https_state.params = params
@@ -131,6 +132,7 @@ assert_equal(state.opens[1].host, "proxy.example", "raw destination host")
 assert_equal(state.opens[1].port, "3128", "raw destination port")
 assert_equal(https_state.calls, 1, "LuaSec creator selection")
 local tunnel = https_state.params.proxy_tunnel
+assert_equal(tunnel.authorization, "caller-must-not-leak", "explicit CONNECT authorization")
 assert_equal(tunnel.host, "origin.example", "tunnel origin host")
 assert_equal(tunnel.port, 443, "defaulted tunnel origin port")
 assert_equal(tunnel.user, "pr%40xy", "proxy user decoded once")
@@ -198,13 +200,14 @@ assert_equal(https_state.calls, 1, "direct HTTPS creator selection")
 assert_equal(https_state.params.proxy_tunnel, nil,
     "direct HTTPS unexpectedly created a proxy tunnel")
 
--- HTTPS through an HTTPS proxy is not classified as an HTTP CONNECT tunnel.
+-- Unsupported TLS-to-proxy configurations fail instead of falling back.
 reset({ { code = 200, headers = {} } })
-request {
+local result, err = http.request {
     url = "https://origin.example/via-https-proxy",
     proxy = "https://proxy.example:3128"
 }
-assert_equal(https_state.params.proxy_tunnel, nil,
-    "HTTPS proxy unexpectedly created an HTTP CONNECT tunnel")
+assert_equal(result, nil, "HTTPS proxy unexpectedly succeeded")
+assert_equal(err, "unsupported HTTPS proxy", "unsupported scheme error")
+assert_equal(#state.opens, 0, "unsupported scheme opened a connection")
 
 print("http proxy CONNECT classification tests: ok")

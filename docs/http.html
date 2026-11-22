@@ -181,7 +181,16 @@ request header field, or the function will attempt to send the body as
 <a href="https://github.com/lunarmodules/luasocket/blob/master/ltn012.md">LTN12</a>
 pump step function used to move data.
 Defaults to the LTN12 <tt>pump.step</tt> function.</li>
-<li><tt>proxy</tt>: The URL of a proxy server to use. Defaults to no proxy;</li>
+<li><tt>proxy</tt>: The URL of a proxy server to use, overriding
+<tt>http.PROXY</tt>. Automatic HTTPS requests through an <tt>http://</tt>
+proxy use CONNECT and require matching LuaSec CONNECT support
+(<tt>ssl.https.PROXY_TUNNEL</tt>). The TLS connection verifies the origin,
+not the proxy, according to the caller's TLS parameters. URL-encoded Basic
+proxy credentials and an explicit <tt>Proxy-Authorization</tt> header are
+sent only in CONNECT; an explicit header takes precedence. The tunneled
+HTTP request uses origin-form. TLS-to-proxy and SOCKS URLs are not supported
+for automatic HTTPS requests. Caller-supplied <tt>create</tt> functions retain
+responsibility for their own proxy behavior. Defaults to no proxy;</li>
 <li><tt>redirect</tt>: Set to <tt><b>false</b></tt> to prevent the
 function from  automatically following 301 or 302 server redirect messages;</li>
 <li><tt>create</tt>: An optional function to be used instead of
