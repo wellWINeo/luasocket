@@ -96,7 +96,9 @@ http.open = function(host, port, create)
     function record.connection:receiveheaders()
         return response.headers or {}
     end
-    function record.connection:receivebody()
+    function record.connection:receivebody(headers, sink)
+        assert(not record.closed, "receivebody called after connection close")
+        if response.body then sink(response.body) end
         return 1
     end
     function record.connection:close()
@@ -145,19 +147,48 @@ assert_equal(state.opens[1].headers.authorization, "Basic origin:secret!",
 
 -- An HTTPS redirect gets a fresh tunnel descriptor for its new origin.
 reset({
-    { code = 302, headers = { location = "https://redirected.example/new" } },
+    { code = 302, headers = { location = "https://redirected.example:8443/new" } },
     { code = 200, headers = {} }
 })
 request {
     url = "https://origin.example/old",
-    proxy = "http://proxy.example:8080"
+    proxy = "http://proxy.example:8080",
+    verify = "peer",
+    cafile = "trusted.pem",
+    hostflags = "no_wildcards"
 }
 assert_equal(#state.opens, 2, "redirect tunnel request count")
 assert_equal(state.opens[1].host, "proxy.example", "first redirect raw host")
 assert_equal(state.opens[2].host, "proxy.example", "second redirect raw host")
 assert_equal(https_state.params.proxy_tunnel.host, "redirected.example",
     "redirect tunnel origin host")
+assert_equal(tostring(https_state.params.proxy_tunnel.port), "8443",
+    "redirect tunnel origin port")
+assert_equal(state.opens[2].port, "8080", "redirect proxy dial port")
 assert_equal(state.opens[2].uri, "/new", "redirect origin-form URI")
+assert_equal(https_state.params.verify, "peer", "redirect TLS verification")
+assert_equal(https_state.params.cafile, "trusted.pem", "redirect CA file")
+assert_equal(https_state.params.hostflags, "no_wildcards", "redirect host flags")
+
+-- Client identity on a tunneled request returns the original non-302 response.
+local delivered_body
+reset({ { code = 307, status = "Temporary Redirect", body = "benign body",
+    headers = { location = "https://redirected.example/new" } } })
+local identity_result, identity_code, identity_headers, identity_status =
+    http.request {
+        url = "https://origin.example/old",
+        proxy = "http://proxy.example:8080",
+        certificate = "identity.pem",
+        sink = function(chunk) delivered_body = chunk end
+    }
+assert_equal(identity_result, 1, "identity redirect result")
+assert_equal(identity_code, 307, "identity redirect status code")
+assert_equal(identity_headers.location, "https://redirected.example/new",
+    "identity redirect location")
+assert_equal(identity_status, "Temporary Redirect", "identity redirect status")
+assert_equal(#state.opens, 1, "identity redirect tunnel count")
+assert_equal(delivered_body, "benign body", "identity redirect body delivery")
+assert(state.opens[1].closed, "identity redirect connection closed")
 
 -- A caller connector disables automatic classification and all shaping.
 local custom_calls = 0

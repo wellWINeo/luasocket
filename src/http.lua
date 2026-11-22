@@ -352,7 +352,7 @@ local function adjustrequest(reqt)
     nreqt.host, nreqt.port, proxy_create = adjustproxy(nreqt, proxy, tunnel)
     if not reqt.create then nreqt.create = proxy_create end
 
-    return nreqt
+    return nreqt, tunnel
 end
 
 local function shouldredirect(reqt, code, headers)
@@ -384,7 +384,7 @@ end
 -- forward declarations
 local trequest, tredirect
 
---[[local]] function tredirect(reqt, location)
+--[[local]] function tredirect(reqt, location, tunnel)
     -- the RFC says the redirect URL may be relative
     local newurl = url.absolute(reqt.url, location)
     -- if switching schemes, reset port and create function
@@ -392,7 +392,7 @@ local trequest, tredirect
         reqt.port = nil
         reqt.create = nil end
     -- make new request
-    local result, code, headers, status = trequest {
+    local newreqt = {
         url = newurl,
         source = reqt.source,
         sink = reqt.sink,
@@ -402,6 +402,16 @@ local trequest, tredirect
         nredirects = (reqt.nredirects or 0) + 1,
         create = reqt.create
     }
+    if tunnel then
+        for _, option in base.ipairs {
+            "verify", "cafile", "capath", "depth", "verifyext", "hostflags",
+            "protocol", "options", "ciphers", "ciphersuites", "curve",
+            "curveslist", "alpn"
+        } do
+            newreqt[option] = reqt[option]
+        end
+    end
+    local result, code, headers, status = trequest(newreqt)
     -- pass location header back as a hint we redirected
     headers = headers or {}
     headers.location = headers.location or location
@@ -411,7 +421,7 @@ end
 --[[local]] function trequest(reqt)
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
-    local nreqt = adjustrequest(reqt)
+    local nreqt, tunnel = adjustrequest(reqt)
     local h = _M.open(nreqt.host, nreqt.port, nreqt.create)
     -- send request line and headers
     h:sendrequestline(nreqt.method, nreqt.uri)
@@ -437,9 +447,11 @@ end
     headers = h:receiveheaders()
     -- at this point we should have a honest reply from the server
     -- we can't redirect if we already used the source, so we report the error
-    if shouldredirect(nreqt, code, headers) and not nreqt.source then
+    if shouldredirect(nreqt, code, headers) and not nreqt.source
+        and not (tunnel and (reqt.certificate or reqt.certificates or reqt.key
+            or reqt.psk or reqt.dane)) then
         h:close()
-        return tredirect(reqt, headers.location)
+        return tredirect(reqt, headers.location, tunnel)
     end
     -- here we are finally done
     if shouldreceivebody(nreqt, code) then

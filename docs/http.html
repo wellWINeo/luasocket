@@ -190,7 +190,10 @@ proxy credentials and an explicit <tt>Proxy-Authorization</tt> header are
 sent only in CONNECT; an explicit header takes precedence. The tunneled
 HTTP request uses origin-form. TLS-to-proxy and SOCKS URLs are not supported
 for automatic HTTPS requests. Caller-supplied <tt>create</tt> functions retain
-responsibility for their own proxy behavior. Defaults to no proxy;</li>
+responsibility for their own proxy behavior. Automatic redirects of tunneled
+HTTPS requests are not followed when client-identity options
+(<tt>certificate</tt>, <tt>certificates</tt>, <tt>key</tt>, <tt>psk</tt>, or
+<tt>dane</tt>) are supplied. Defaults to no proxy;</li>
 <li><tt>redirect</tt>: Set to <tt><b>false</b></tt> to prevent the
 function from  automatically following 301 or 302 server redirect messages;</li>
 <li><tt>create</tt>: An optional function to be used instead of
